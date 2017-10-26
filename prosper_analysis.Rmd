@@ -1,0 +1,648 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+Analysis of US loan data (2005-2014) by Christopher Buss
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(plyr)
+library(corrplot)
+library(memisc)
+library(car)
+library(RColorBrewer)
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Set path
+setwd("C:/Users/chrmaier/Box Sync/04 Data Science/01 Udacity/05 EDA/03 Project")
+
+# Import data
+df <- read.csv("prosperLoanData.csv") # read csv file
+
+# Keep original df for comparison
+df_full <- df
+```
+
+# Univariate Plots Section
+There are two main reasons for me to use the prosper loan data. 
+First, because it is a highly relevant societal topic as we have seen how the dept 
+crisis in the US in 2008 lead to a global recession. Second, because I have recently 
+bougt a flat and I am interested which factors determine interest rates for individual 
+customers. I begin the exploration with an univariate analysis of the dataset.
+
+## Loans
+```{r echo=FALSE, warning=FALSE}
+# Recode quarters to order them
+df$Quarter <- car::recode(df$LoanOriginationQuarter, "
+      'Q4 2005'='05/4';      
+      'Q1 2006'='06/1';
+      'Q2 2006'='06/2'; 
+      'Q3 2006'='06/3';
+      'Q4 2006'='06/4';
+      'Q1 2007'='07/1';
+      'Q2 2007'='07/2'; 
+      'Q3 2007'='07/3';
+      'Q4 2007'='07/4';
+      'Q1 2008'='08/1';
+      'Q2 2008'='08/2'; 
+      'Q3 2008'='08/3';
+      'Q4 2008'='08/4'; 
+      'Q1 2009'='09/1';
+      'Q2 2009'='09/2'; 
+      'Q3 2009'='09/3';
+      'Q4 2009'='09/4'; 
+      'Q1 2010'='10/1';
+      'Q2 2010'='10/2'; 
+      'Q3 2010'='10/3';
+      'Q4 2010'='10/4'; 
+      'Q1 2011'='11/1';
+      'Q2 2011'='11/2'; 
+      'Q3 2011'='11/3';
+      'Q4 2011'='11/4'; 
+      'Q1 2012'='12/1';
+      'Q2 2012'='12/2'; 
+      'Q3 2012'='12/3';
+      'Q4 2012'='12/4'; 
+      'Q1 2013'='13/1';
+      'Q2 2013'='13/2'; 
+      'Q3 2013'='13/3';
+      'Q4 2013'='13/4'; 
+      'Q1 2014'='14/1';
+      'Q2 2014'='14/2'; 
+      'Q3 2014'='14/3';
+      'Q4 2014'='14/4'")
+
+# Workaround: Counting N over quarter and saving to df  
+df$count <- 1
+dfCount <- aggregate(df$count, by=list(Category=df$Quarter), FUN=sum)
+# Define breaks for discrete x-scale
+brks = c("05/4", "06/4", "07/4", "08/4", "09/4", "10/4", "11/4", "12/4", "13/4", "14,4")
+
+ggplot(dfCount, aes(x = Category, y = x)) +
+  geom_point() +
+  xlab("Quarter") +
+  ylab("Number of loans") +
+  ggtitle("Number of loans over time") +
+  scale_x_discrete(breaks = brks)
+```
+
+The number of loans fluctuates over time. There is a steep increase towards the
+end of the period of investigation.
+
+## BorrowerRate
+```{r echo=FALSE, warning=FALSE}
+# Hist and summary statistics of BorrowerRate
+summary(df$BorrowerRate)
+ggplot(aes(x = BorrowerRate), data = df) +
+  geom_histogram(breaks=seq(0,0.4, by=0.005))
+
+"Modus:" 
+names(sort(-table(df$BorrowerRate)))[1]
+```
+
+The mean interest rate for all loans is about 19%. The distribution approximates
+a normal distribution with a high peak at exactly 31.77%. This might be a problem
+with the data or could be a result of a special offer for loans at this rate.
+
+```{r echo=FALSE, warning=FALSE}
+# BorrowerRate over time
+ggplot(aes(x = Quarter, 
+          y = BorrowerRate, group = 1), 
+          data = df) +
+  geom_line(stat = "summary", 
+      fun.y = median,
+      color = "red") +
+  coord_cartesian(ylim = c(0, 0.3)) +
+  labs(x= "Quarter", y= "Median BorrowerRate") +
+  scale_x_discrete(breaks = brks)
+```
+
+Overall, the median rate is surprisingly stable over time. However, there is an 
+increase in the second half of 2010 and a decrease on the previous level from 2012
+onwards.
+
+## Prosper Score
+```{r echo=FALSE, warning=FALSE}
+
+summary(df$ProsperScore)
+
+ggplot(aes(x = ProsperScore), data = df) +
+  geom_histogram(breaks=seq(0,11, by=1))
+```
+
+## Amount
+```{r echo=FALSE}
+summary(df$LoanOriginalAmount)
+
+ggplot(aes(x = LoanOriginalAmount), data = df) +
+  geom_histogram(breaks=seq(0,35000, by=1000))
+```
+
+The amount of the loans ranges from \$1,000 to \$35,000 with a median loan of 
+\$6,500. There are several suspisious peaks in the distribution. 
+
+```{r echo=FALSE}
+ggplot(aes(x = LoanOriginalAmount), data = df) +
+  geom_histogram(breaks=seq(1,5000, by=100))
+
+df$AmountLog <- log(df$LoanOriginalAmount)
+ggplot(aes(x = AmountLog), data = df) +
+  geom_histogram(breaks=seq(7,11, by=0.3))
+```
+
+Zooming in, I see that these peaks represent multiplikates of \$500 and \$1000. 
+There are peaks in the distribution at \$4,000, \$10,000, \$15,000, \$20,000 
+and \$25,000. Because of the skewed distribution I decide to use a log scale 
+for this variable, leading to a distribution that is closer to a normal distribution.
+
+## Monthly income 
+```{r echo=FALSE, warning=FALSE}
+# Rename income to make it more readable
+df <- rename(df, c("StatedMonthlyIncome"="Income"))
+
+summary(df$Income)
+
+ggplot(df, aes(y = Income, x = "")) + 
+  geom_boxplot()
+
+ggplot(aes(x = Income), data = df) +
+  geom_histogram(breaks=seq(0,20000, by=500))
+```
+
+The Boxplot reveals that there is one extreme outlier with \$1,750,003 monthly 
+income, a yearly income of moren than \$21 Million. It is not impossible, but 
+highly unlikely that someone with such a high income needs a loan of a few thousand 
+Dollars. Therefore, I assume an error in the data and exclude this case from  
+further analyses.
+
+Because of the skewed distribution, I  decide to use a 
+log scale for the income variable.
+
+```{r echo=TRUE, warning=FALSE}
+# Excluding cases with unrealistic income
+df <- subset(df, Income < 1750000)
+
+# Transform income to log-scale
+df$IncomeLog <- log(df$Income+1)
+ggplot(aes(x = IncomeLog), data = df) +
+  geom_histogram(breaks=seq(6,11, by=0.1))
+```
+
+## MonthlyLoanPayment
+```{r echo=FALSE, warning=FALSE, MonthlyPayment}
+summary(df$MonthlyLoanPayment)
+
+ggplot(aes(x = MonthlyLoanPayment), data = df) +
+  geom_histogram(breaks=seq(0,2300, by=100))
+
+ggplot(aes(x = MonthlyLoanPayment), data = df) +
+  geom_histogram(breaks=seq(0,1000, by=10))
+```
+
+## Monthly payment as share of total amount
+```{r echo=FALSE, warning=FALSE}
+df$LoanPaymentPerc <- df$LoanOriginalAmount/df$MonthlyLoanPayment
+summary(subset(df, is.finite(LoanPaymentPerc), select=LoanPaymentPerc))
+
+ggplot(df, aes(y = LoanPaymentPerc, x = "")) + 
+  geom_boxplot()
+
+df <- subset(df, LoanPaymentPerc < 100)
+
+ggplot(aes(x = LoanPaymentPerc), data = df) +
+  geom_histogram(breaks=seq(0,100, by=1))
+
+ggplot(aes(x = LoanPaymentPerc), data = df) +
+  geom_histogram(breaks=seq(20,50, by=0.5)) +
+  xlab("% of total loan that is paid back monthly")
+```
+
+I calculate the share of the monthly payments from the total loan. The majority
+of payments are about 20%-40% of the total loan. There are some extreme outliers
+with payments much higher than the total loan. I exclude these cases from the analysis
+because these do not seem to be valid values to me.
+
+## Term
+```{r echo=FALSE, warning=FALSE}
+summary(df$Term)
+#table(df$Term)
+
+# Recode "Term" to categorial variable
+df$TermRe <- df$Term
+df$TermRe[df$Term==12] <- 0
+df$TermRe[df$Term==36] <- 1
+df$TermRe[df$Term==60] <- 2
+df$TermRe <- factor(df$TermRe, levels = c(0,1,2), labels = c("Short", "Medium", "Long"))
+table(df$TermRe)
+```
+
+There are only 12, 36 and 60 month values in *term*. 
+Therefore, I recode it to a categorial variable.
+
+## Employment status
+```{r echo=FALSE, warning=FALSE}
+# Ordered Bar Chart and Table
+# (https://stackoverflow.com/questions/5208679/order-bars-in-ggplot2-bar-graph?newreg=6ddc9ae45899482aaff51fbd1b098567)
+ggplot(df, aes(x=reorder(EmploymentStatus,EmploymentStatus, function(x)-length(x)))) +
+  geom_bar(stat="count", width=0.7, fill="steelblue") +
+  xlab('Employment status')
+  
+table(df$EmploymentStatus)
+```
+
+The categories of the employment status variable are not mutually exclusive and
+the missings are coded in different ways. Therefore, I recode the variable. Because
+I do not want to exclude all missings on this variable in a later regression, I do
+not mark these cases as "NA" but as "unknown".
+
+```{r echo=TRUE, warning=FALSE}
+# Recode employment
+df$Employment_re<-car::recode(df$EmploymentStatus,
+    "c('Employed', 'Full-time') = 'Employed';
+    c('Other', 'Not available', '') = 'Unknown' ")
+```
+
+```{r echo=FALSE, warning=FALSE}
+ggplot(df, aes(x=reorder(Employment_re,Employment_re, function(x)-length(x)))) +
+  geom_bar(stat="count", width=0.7, fill="steelblue") +
+  xlab('Employment status')
+  
+#table(df$Employment_re)
+```
+
+## Homeowners
+```{r echo=FALSE, warning=FALSE, Cat}
+"Percentage of homeowners:"
+round(prop.table(table(df$IsBorrowerHomeowner)),3)
+table(df$BorrowerState)
+```
+
+About half of the borrowers are home owners. They come from all 51 US states.
+
+# Loan status
+```{r echo=FALSE, warning=FALSE}
+table(df$LoanStatus)
+
+# Recode status of the loan in fewer categories
+df$LoanStatusRe <- car::recode(df$LoanStatus,
+    "c('Chargedoff', 'Defaulted', 'Cancelled') = 'Def/Cancelled';
+    c('Past Due (>120 days)', 
+    'Past Due (1-15 days)',
+    'Past Due (16-30 days)',
+    'Past Due (31-60 days)',
+    'Past Due (61-90 days)',
+    'Past Due (91-120 days)') = 'Past Due';
+    'FinalPaymentInProgress' = 'Completed' ")
+
+table(df$LoanStatusRe)
+```
+
+I recode the loan status to four categories.
+
+## DebtToIncomeRatio
+```{r echo=FALSE, warning=FALSE}
+# DebtToIncomeRatio
+summary(df$DebtToIncomeRatio)
+
+ggplot(aes(y = DebtToIncomeRatio, x=""), data = df) +
+  geom_boxplot()
+
+ggplot(aes(x = DebtToIncomeRatio), data = df) +
+  geom_histogram(breaks=seq(0,1, by=0.01))
+```
+
+Most borrowers have a *DebtToIncomeRatio* of about 0 to 0.75. However, there is
+a number of extreme outliers up to 10. Either there are errors in the data, or
+some people are highly in dept. We should take this distribution into account when
+interpreting regression results later on.
+
+## Recommendations, InvestmentsFromFriends
+```{r echo=FALSE, warning=FALSE}
+summary(df$Recommendations)
+summary(df$InvestmentFromFriendsCount)
+```
+
+Only few borrowers have a value other than "0" for recommendations and
+investments from friends. Because of this low information value, I will not 
+consider these variables in the following analysis.
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+There are 113,937 observations and 82 variables.
+
+### What is/are the main feature(s) of interest in your dataset?
+The main feature of interest is the borrower rate. I suspect that certain aspects
+of the borrower and the loan itself are related to the borrower rate.
+
+### What other features in the dataset do you think will help support your investigation?
+In particular, I assume the following features are useful for my predictive model:
+*Aspects of the borrower**
+*	Prosper scores
+*	Income
+*	Dept to income ratio
+
+*Aspects of the loan**
+*	Amount
+*	Monthly payment relative to loan
+* Term of the loan
+
+I also assume that other factors such as the recommendations might be related
+to the interest rate. However, these variables contain little variance and therefore
+are left out of the further analysis. Occupation could also be interesting, but I would
+need to combine the many categories in a sensible way, which goes beyond the scope 
+of this EDA.
+
+### Did you create any new variables from existing variables in the dataset?
+I calculate the share of the monthly payments from the total loan.
+I recoded the variable for *employment status* by combining categories.
+Also, I recoded *term* from a continous to a categorial variable.
+
+### Of the features you investigated, were there any unusual distributions?
+*Income* and the *total amount of the loan* exhibited skewed distributions. Therefore,
+I calculated the logs for these values.
+
+# Bivariate Plots Section
+
+```{r echo=FALSE, warning=FALSE}
+# Subset relevant variables
+df_subset = df[, c('BorrowerRate',
+          'MonthlyLoanPayment',
+          'ProsperScore',
+          'LoanOriginalAmount',
+          'DebtToIncomeRatio',
+          'IncomeLog',
+          'LoanPaymentPerc')]
+
+# Correlation matrix + visualization
+cor_mat <- cor(df_subset, method = "pearson", use="complete.obs")
+#round(cor_mat, 2)
+
+# Create correlation plot
+corrplot(cor_mat, type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45)
+
+# Scatterplot matrix
+set.seed(2000)
+ggpairs(df_subset[sample.int(nrow(df_subset), 200),]) +
+    ggtitle("Scatterplot matrix of variables of interest")
+```
+
+These plots show the correlations between the variables of interest. I proceed
+with a closer look at variables that show a strong relationship or unusual patterns.
+
+## Scatterplots - Borrower rate and independent variables
+```{r echo=FALSE, warning=FALSE}
+ggplot(aes(x = ProsperScore, y = BorrowerRate), data = df) +
+  geom_jitter(alpha = 1/40) +                                   # add shades and noise
+  geom_line(stat = "summary",                                   # add line for mean
+      fun.y = mean,
+      color = "yellow",
+      size = 2) +
+  coord_cartesian(ylim = c(0, 0.35)) +                          # Restrict y-range
+  ggtitle("Borrower rate X Prosper score")
+
+## Scatter - BorrowerRate X LoanOriginalAmount
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
+  geom_jitter(alpha = 1/10) +
+  xlim(0,0.35) +
+  ggtitle("Borrower rate X Amount")
+```
+
+*ProsperScore* is clearly related to *BorrowerRate*. Individuals with the worst
+score pay amout three times more interest rates than individuals with the best
+score. There is an interesting break in the line between scores 5 and 6, showing
+that there is no difference in the Borrower rate between these groups.
+
+There is a very interesting pattern for the second plot. There is a negative relationship
+between the *monthly loan payment* (as share of the loan) and *borrower rate*. However,
+there are different trajectories in the data. This needs more exploration in the
+multivariate part.
+
+## Scatterplots - independent variables
+```{r echo=FALSE, warning=FALSE}
+ggplot(aes(x = ProsperScore, y = LoanOriginalAmount), data = df) +
+  geom_jitter(alpha = 1/40) +                                   # add shades and noise
+  geom_line(stat = "summary",                                   # add line for mean
+      fun.y = mean,
+      color = "yellow",
+      size = 2) +
+  ggtitle("ProsperScore X LoanOriginalAmount")
+
+ggplot(aes(x = IncomeLog, y = MonthlyLoanPayment), data = df) +
+  geom_jitter(alpha = 1/50) +
+  ylim(0,1000) +
+  ggtitle("Income X Amount of loan")
+```
+
+There are also interesting patterns in regard to the independent variables.
+
+## Loan status over time
+```{r echo=FALSE, warning=FALSE}
+# Read loan status per quarter into table
+TableStatus <- round(prop.table(table(df$Quarter, df$LoanStatusRe),1),3)
+
+# Plot this table (converted to df)
+ggplot(aes(x = Var1, y = Freq, group=Var2), data = as.data.frame(TableStatus)) +
+    geom_line(aes(color=Var2), size=1.2) +
+    xlab("Quarter") + ylab("Proportion of all loans") +
+    labs(color = "Loan status") +
+    scale_x_discrete(breaks = brks)
+```
+
+The status of the loans is related to the quarter in which the loan originated.
+From the earlier quarters, all loans are either completed, defaulted on or cancelled.
+This reflects the short loan period in the data set. There is a surprisingly high
+share of loans that defaulted, in particular in the years 2007 and 2008.
+This is possibly related to the economic crisis in these years.
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part
+Overall, the choosen variables in the data set are highly correlated. Most interesting
+for the aim of this project are the correlations between *BorrowerRate* and the other
+variables. There is a negative relationship between *BorrowerRate* and monthly payment
+(both in absolute terms and as share of the loan), the amount of the loan, and prosper score.
+
+### Did you observe any interesting relationships between the other features \ (not the main feature(s) of interest)?
+The independent variables are also correlated with each other. For example, there
+is a positive relationship between *personal income* on the one hand, and the *amount*,
+*monthly payment* and *prosper score* on the other hand. Individuals with a high income
+recieve bigger loans with better conditions than individuals with little income.
+
+### What was the strongest relationship you found?
+The strongest relationship is between *BorrowerRate* and *ProsperScore*.
+
+## Multivariate Plots Section
+```{r echo=FALSE, warning=FALSE}
+### Loan status
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
+  geom_jitter(alpha = 1/100) +
+  geom_point(aes(colour = factor(LoanStatusRe))) +
+  xlim(0,0.35) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(color = "Loan status")
+
+### Quarter
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
+  geom_jitter(alpha = 1/100) +
+  geom_point(aes(colour = factor(Quarter))) +
+  xlim(0,0.35) +
+  labs(color = "Quarter")
+
+ggplot(df, aes(BorrowerRate, colour = LoanStatusRe)) +
+  geom_density(size = 1) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(color = "Loan status")
+```
+
+The interesting relationship between *BorrowerRate* and *LoanPaymentPerc* seem to be
+related to either the status of the loan or the quarter. Those data points on the
+"lines" in the plot are predominantly loans that are recent (2011 onwards) and current.
+Older, completed loans often diverge from this pattern.
+
+```{r echo=FALSE, warning=FALSE}
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
+  geom_jitter(alpha = 1/100) +
+  geom_point(aes(colour = factor(ProsperScore))) +
+  xlim(0,0.35) +
+  ggtitle("Relationship between interest rate, monthly payment and score") +
+  xlab("Interest rate") +
+  ylab("Monthly payment relative to total amount of loan") +
+  labs(color = "Score")
+```
+
+Apparently, *ProsperScores* are also related to the other two variables of interest.
+For all individuals with a score assigned, the monthly payment describes perfectly
+the interest rate. For individuals without a score (=earlier loans), there is much
+more dispersion.
+
+```{r echo=FALSE, warning=FALSE}
+ggplot(df, aes(BorrowerRate, colour = TermRe)) +
+  geom_density(size = 1) +
+  labs(color = "Length of loan")
+
+ggplot(df, aes(x=TermRe, y=BorrowerRate)) + 
+  geom_boxplot()
+```
+
+Another interesting pattern emerges when plotting the distribution of *BorrowerRate*
+across the legth of the loan. Borrower rates increase with term length, but the
+rates of medium-length loans are more dispersed.
+
+## Linear regression analysis
+```{r echo=FALSE, warning=FALSE}
+# Stepwise multivariate regressions
+m1 <- lm(df$BorrowerRate ~ df$ProsperScore)
+m2 <- update(m1, ~ . + df$AmountLog)
+m3 <- update(m2, ~ . + df$IncomeLog)
+m4 <- update(m3, ~ . + df$LoanPaymentPerc)
+m5 <- update(m4, ~ . + df$TermRe)
+m6 <- update(m5, ~ . + df$DebtToIncomeRatio)
+
+# Print tables
+mtable(m1, m2, m3)
+mtable(m4, m5, m6)
+
+```
+
+In the last step I conduct a multivariate regression analysis with *BorrowerRate*
+as dependent variable. I include independent variables stepwise in the model.
+*ProsperScore* expains about 42% of the DV's variance. With each more Scoring-Point,
+*BorrowerRate* is about 0.2 percentage points lower. Judged by R², this is the most
+important predictor of interest rates in the data.
+From the other variables, the length of the loan (TermRe) is also quite important.
+About 30% additional explained variance can be attributed to this variable. Overall,
+with an R² of about 0.83 the model fits the data quite well.
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part \
+Were there any interesting or surprising interactions between features?
+
+There is an interesting relationship between *ProsperScore*, *LoanPaymentPerc* and
+*BorrowerRate*. For the most recent loans, *LoanPaymentPerc* is a very good predictor
+for *BorrowerRate*. For older loans, the relationship us much weaker.
+
+### Did you create any models with your dataset? Discuss limitations!
+I calculated a linear regression model with the *interest rate* as dependent variable, 
+and *ProsperScore*, *AmountLog*, *IncomeLog*, *LoanPaymentPerc*, *TermRe* and 
+*DebtToIncomeRatio* as independent variables.
+
+Some other variables in the dataset related to the credit history of the person
+could be of interest. Another limitation is that these results indicate correlation,
+but not causation.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, warning=FALSE, Plot_One}
+set.seed(2000)
+ggpairs(df_subset[sample.int(nrow(df_subset), 200),]) +
+    ggtitle("Scatterplot matrix of variables of interest")
+```
+
+### Description One
+This matrix shows the distributions and correlations of the most important variables
+in the analysis. The main variable of interest, the borrower's interest rate (*BorrowerRate*),
+is related to several other variables in the dataset. The most important predictor seem to be
+the borrower's score (*ProsperScore*).
+
+### Plot Two
+```{r echo=FALSE, warning=FALSE}
+ggplot(aes(x = ProsperScore, y = BorrowerRate), data = df) +
+  geom_jitter(alpha = 1/40) +                                   # add shades and noise
+  geom_line(stat = "summary",                                   # add line for mean
+      fun.y = mean,
+      color = "yellow",
+      size = 2) +
+  coord_cartesian(ylim = c(0, 0.35)) +                          # Restrict y-range
+  ggtitle("Borrower rate X Prosper score") +
+  ylab("Interest rate")
+```
+
+### Description Two
+The relationship between *BorrowerRate* and *ProsperScore* is further illustrated
+with this plot. While there is still some variability in the data, there is a clear
+downward trend of the interest rate in case of better scores.
+
+### Plot Three
+```{r echo=FALSE, warning=FALSE}
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
+  geom_jitter(alpha = 1/100) +
+  geom_point(aes(colour = factor(ProsperScore))) +
+  xlim(0,0.35) +
+  ggtitle("Relationship between interest rate, monthly payment and score") +
+  xlab("Interest rate") +
+  ylab("Monthly payment relative to total amount of loan") +
+  labs(color = "Score")
+```
+
+### Description Three
+The third plot visualizes the relationship between interest rate, monthly payment 
+and score. For all individuals with a score assigned, the monthly payment describes 
+perfectly the interest rate. For individuals without a score (=earlier loans), 
+there is much more dispersion.
+
+# Reflection
+Overall, the results are not surprising - the interest rate largely depends on the
+credibility of the borrower and the characteristics of the loan. I am still puzzled
+by Plot 3 in my summary. I cannot explain the pattern in this graph, but I assume that
+the interest rate is calculated differently for old (completed) loans than for newer
+(current) loans. However, this point needs further exploration.
+
+I did struggle a bit with the R-syntax at times because I am a genuine user of STATA.
+In particular, I had to use some workarounds to make the plots over time work.
+However, the graph functions in R a really nice!
+
+Future analysis of the dataset could explore the following points:
+* How can be predict if a borrower defaults on a loan?
+* Are there regional differences between states?
+* How can we predict someone's ProsperScore?
