@@ -19,7 +19,7 @@ library(RColorBrewer)
 
 ```{r echo=FALSE, Load_the_Data}
 # Set path
-setwd("C:/Users/chrmaier/Box Sync/04 Data Science/01 Udacity/05 EDA/03 Project")
+setwd("C:/Users/chrmaier/Box Sync/04 Data Science/01 Udacity/05 EDA/03 Project/Final project")
 
 # Import data
 df <- read.csv("prosperLoanData.csv") # read csv file
@@ -170,6 +170,10 @@ summary(df$Income)
 ggplot(df, aes(y = Income, x = "")) + 
   geom_boxplot()
 
+ggplot(df, aes(y = Income, x = "")) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 20000))
+
 ggplot(aes(x = Income), data = df) +
   geom_histogram(breaks=seq(0,20000, by=500))
 ```
@@ -212,6 +216,10 @@ summary(subset(df, is.finite(LoanPaymentPerc), select=LoanPaymentPerc))
 ggplot(df, aes(y = LoanPaymentPerc, x = "")) + 
   geom_boxplot()
 
+ggplot(df, aes(y = LoanPaymentPerc, x = "")) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+
 df <- subset(df, LoanPaymentPerc < 100)
 
 ggplot(aes(x = LoanPaymentPerc), data = df) +
@@ -238,7 +246,11 @@ df$TermRe[df$Term==12] <- 0
 df$TermRe[df$Term==36] <- 1
 df$TermRe[df$Term==60] <- 2
 df$TermRe <- factor(df$TermRe, levels = c(0,1,2), labels = c("Short", "Medium", "Long"))
+
 table(df$TermRe)
+
+ggplot(df, aes(y = TermRe, x = "")) + 
+  geom_boxplot()
 ```
 
 There are only 12, 36 and 60 month values in *term*. 
@@ -515,12 +527,24 @@ ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
   xlab("Interest rate") +
   ylab("Monthly payment relative to total amount of loan") +
   labs(color = "Score")
+
+ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), 
+  data = subset(df, !is.na(df$ProsperScore))) +
+  geom_jitter(alpha = 1/100) +
+  geom_point(aes(colour = factor(ProsperScore))) +
+  xlim(0,0.35) +
+  ggtitle("Relationship between interest rate, monthly payment and score") +
+  xlab("Interest rate") +
+  ylab("Monthly payment relative to total amount of loan") +
+  labs(color = "Score")
 ```
 
 Apparently, *ProsperScores* are also related to the other two variables of interest.
-For all individuals with a score assigned, the monthly payment describes perfectly
-the interest rate. For individuals without a score (=earlier loans), there is much
-more dispersion.
+For all individuals with a score assigned, the monthly payment predicts
+the interest rate very well. This becomes apparent in the second plot - there are three straight lines. The reason for these three trajectories, however, remains unclear.
+
+For individuals without a score (=earlier loans), there is much
+more dispersion of the interest rate.
 
 ```{r echo=FALSE, warning=FALSE}
 ggplot(df, aes(BorrowerRate, colour = TermRe)) +
@@ -584,16 +608,21 @@ but not causation.
 
 ### Plot One
 ```{r echo=FALSE, warning=FALSE, Plot_One}
-set.seed(2000)
-ggpairs(df_subset[sample.int(nrow(df_subset), 200),]) +
-    ggtitle("Scatterplot matrix of variables of interest")
+ggplot(df, aes(BorrowerRate, colour = LoanStatusRe)) +
+  geom_density(size = 1) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(color = "Loan status")
 ```
 
 ### Description One
-This matrix shows the distributions and correlations of the most important variables
-in the analysis. The main variable of interest, the borrower's interest rate (*BorrowerRate*),
-is related to several other variables in the dataset. The most important predictor seem to be
-the borrower's score (*ProsperScore*).
+This plot shows the distribution of the *BorrowerRate* for the four different
+status. It becomes apparent that on the one hand completed/current loans and
+on the other hand defaulted/past due loans have a different distribution.
+For the former, *BorrowerRate* is usually lower.
+
+The direction of causality, however, is unclear. It might be that individuals with
+lower rates default less often, or that defaulting the loan leads to increased
+rates.
 
 ### Plot Two
 ```{r echo=FALSE, warning=FALSE}
@@ -621,7 +650,7 @@ ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
   xlim(0,0.35) +
   ggtitle("Relationship between interest rate, monthly payment and score") +
   xlab("Interest rate") +
-  ylab("Monthly payment relative to total amount of loan") +
+  ylab("Monthly payment relative to total amount of loan (in US$)") +
   labs(color = "Score")
 ```
 
