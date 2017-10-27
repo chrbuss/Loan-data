@@ -249,12 +249,14 @@ df$TermRe <- factor(df$TermRe, levels = c(0,1,2), labels = c("Short", "Medium", 
 
 table(df$TermRe)
 
-ggplot(df, aes(y = TermRe, x = "")) + 
-  geom_boxplot()
+ggplot(df, aes(TermRe)) + 
+  geom_bar() +
+  xlab("Length of loan - TermRe")
 ```
 
 There are only 12, 36 and 60 month values in *term*. 
-Therefore, I recode it to a categorial variable.
+Therefore, I recode it to a categorial variable. By far the most loans have a 
+medium duration of 36 month.
 
 ## Employment status
 ```{r echo=FALSE, warning=FALSE}
@@ -541,7 +543,8 @@ ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc),
 
 Apparently, *ProsperScores* are also related to the other two variables of interest.
 For all individuals with a score assigned, the monthly payment predicts
-the interest rate very well. This becomes apparent in the second plot - there are three straight lines. The reason for these three trajectories, however, remains unclear.
+the interest rate very well. This becomes apparent in the second plot - there are 
+three straight lines. The reason for these three trajectories, however, remains unclear.
 
 For individuals without a score (=earlier loans), there is much
 more dispersion of the interest rate.
@@ -656,9 +659,18 @@ ggplot(aes(x = BorrowerRate, y = LoanPaymentPerc), data = df) +
 
 ### Description Three
 The third plot visualizes the relationship between interest rate, monthly payment 
-and score. For all individuals with a score assigned, the monthly payment describes 
-perfectly the interest rate. For individuals without a score (=earlier loans), 
-there is much more dispersion.
+and score. For all individuals with a score assigned (data points not in grey), 
+the monthly payment describes the interest rate very well. There are three
+"lines" with different trajectories. For each of these trajectories, there is a 
+nearly perfect correlation between the monthly payment and the interest rate.
+The color gradient of the line indicates that the factor score is another important
+determinant of interest rates.
+
+However, two questions remain open. First, why do data points with NA on the factor
+score deviate so much from this pattern? The reason might be that interest rates
+are calculated in a different way when no score is availabe to the lender.
+Second, why are there three different trajectories? It is likely that a fourth
+independent variable is responsible for this.
 
 # Reflection
 Overall, the results are not surprising - the interest rate largely depends on the
